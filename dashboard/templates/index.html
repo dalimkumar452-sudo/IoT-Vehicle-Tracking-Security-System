@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enterprise Vehicle Telematics</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        /* --- Ultra-Pro Enterprise Dark Theme --- */
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0f172a; /* Deep Slate Blue */
+            color: #f8fafc;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            gap: 20px;
+            height: 100vh;
+            box-sizing: border-box;
+            overflow: hidden; /* Prevents scrollbars */
+        }
+
+        .sidebar {
+            width: 380px;
+            min-width: 380px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            overflow-y: auto;
+            padding-right: 5px; /* Scrollbar breathing room */
+        }
+
+        /* Scrollbar Styling for Sidebar */
+        .sidebar::-webkit-scrollbar { width: 6px; }
+        .sidebar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+
+        .card {
+            background: #1e293b;
+            padding: 20px;
+            border-radius: 16px;
+            border: 1px solid #334155;
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3);
+        }
+
+        h2 {
+            margin-top: 0;
+            font-size: 16px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #94a3b8;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 12px;
+            margin-bottom: 15px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .stat-box {
+            background: #0f172a;
+            padding: 15px;
+            border-radius: 12px;
+            border: 1px solid #1e293b;
+            text-align: center;
+        }
+
+        .stat-label {
+            font-size: 13px;
+            color: #64748b;
+            font-weight: 600;
+        }
+
+        .stat-value {
+            font-size: 26px;
+            font-weight: 800;
+            color: #10b981; /* Emerald Green */
+            margin-top: 5px;
+        }
+
+        /* Animated Pulse Effect for Danger */
+        @keyframes pulse-red {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+
+        .alert-box {
+            background: #f59e0b;
+            color: #fff;
+            padding: 15px;
+            border-radius: 12px;
+            font-weight: 800;
+            text-align: center;
+            display: none;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .alert-box.danger {
+            background: #ef4444;
+            display: block;
+            animation: pulse-red 1.5s infinite;
+            border: 2px solid #f87171;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 16px;
+            border: none;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .btn-lock { background: #ef4444; color: white; box-shadow: 0 4px 6px -1px rgba(239,68,68,0.4); }
+        .btn-lock:hover { background: #dc2626; transform: translateY(-2px); }
+
+        .btn-unlock { background: #10b981; color: white; box-shadow: 0 4px 6px -1px rgba(16,185,129,0.4); }
+        .btn-unlock:hover { background: #059669; transform: translateY(-2px); }
+
+        /* CRITICAL MAP CSS FIX */
+        #map-wrapper {
+            flex-grow: 1;
+            height: 100%;
+            border-radius: 16px;
+            border: 1px solid #334155;
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.5);
+            overflow: hidden; /* Keeps map corners rounded */
+            position: relative;
+            background: #e5e5e5; /* Light fallback color */
+        }
+
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+        
+        /* Custom Map Tooltip styling (Dark popups on Light Map) */
+        .leaflet-popup-content-wrapper { background: #1e293b; color: #f8fafc; border-radius: 8px; border: 1px solid #334155;}
+        .leaflet-popup-tip { background: #1e293b; }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar">
+        <div class="card">
+            <h2>Security Status</h2>
+            <div id="geofenceAlert" class="alert-box">System Secure</div>
+        </div>
+
+        <div class="card">
+            <h2>Live Telemetry</h2>
+            <div class="stats-grid">
+                <div class="stat-box">
+                    <div class="stat-label">SPEED</div>
+                    <div id="speed" class="stat-value">0 <span style="font-size:14px">km/h</span></div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">DISTANCE</div>
+                    <div id="distance" class="stat-value">0 <span style="font-size:14px">m</span></div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">ENGINE</div>
+                    <div id="engineStatus" class="stat-value">ON</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">COORDINATES</div>
+                    <div id="coords" style="font-size: 13px; color: #94a3b8; font-weight:600; margin-top: 10px;">0.00, 0.00</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Command Center</h2>
+            <button class="btn btn-lock" onclick="sendCommand('LOCK')">🔒 ENFORCE ENGINE LOCK</button>
+            <button class="btn btn-unlock" onclick="sendCommand('UNLOCK')">🔓 AUTHORIZE IGNITION</button>
+        </div>
+    </div>
+
+    <div id="map-wrapper">
+        <div id="map"></div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script>
+        // High-Quality Icons (Car & Home)
+        const carIcon = L.icon({
+            iconUrl: 'https://cdn-icons-png.flaticon.com/512/1048/1048314.png', // Sport Car Icon
+            iconSize: [45, 45],
+            iconAnchor: [22, 22] 
+        });
+        const homeIcon = L.icon({
+            iconUrl: 'https://cdn-icons-png.flaticon.com/512/2544/2544087.png',
+            iconSize: [35, 35],
+        });
+
+        // Initialize Map
+        const map = L.map('map').setView([22.5726, 88.3639], 15);
+        
+        // --- MAP FIX: Clear, Highly Detailed Bright Street Map ---
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        // Map Fix: Invalidate size after layout renders to ensure tiles load
+        setTimeout(function () { map.invalidateSize(); }, 500);
+
+        // Add Base Marker & Geofence (Redesigned colors to stand out on light map)
+        L.marker([22.5726, 88.3639], {icon: homeIcon}).addTo(map).bindPopup("<b>HQ: Safe Zone</b>");
+        L.circle([22.5726, 88.3639], {
+            color: '#10b981',
+            fillColor: '#10b981',
+            fillOpacity: 0.25,
+            weight: 2,
+            radius: 500
+        }).addTo(map);
+
+        let carMarker;
+        // Feature: Vehicle Tracking Trail (Thick Blue line so it's visible on bright map)
+        let routeLine = L.polyline([], {
+            color: '#2563eb', // Strong Blue
+            weight: 5,
+            opacity: 0.9,
+            dashArray: '10, 10' 
+        }).addTo(map);
+
+        function createVehicleMarker(lat, lng) {
+            if (!carMarker) {
+                carMarker = L.marker([lat, lng], {icon: carIcon}).addTo(map);
+            }
+        }
+
+        // Main Telemetry Loop
+        setInterval(async () => {
+            try {
+                const response = await fetch('/api/telemetry');
+                const data = await response.json();
+
+                createVehicleMarker(data.lat, data.lng);
+
+                // Add point to the route trail
+                routeLine.addLatLng([data.lat, data.lng]);
+
+                // Update Stats
+                document.getElementById('speed').innerHTML = `${data.speed} <span style="font-size:14px">km/h</span>`;
+                document.getElementById('distance').innerHTML = `${data.distance} <span style="font-size:14px">m</span>`;
+                document.getElementById('engineStatus').innerText = data.engine;
+                
+                // UI Color logic for Engine
+                document.getElementById('engineStatus').style.color = data.engine === "ON" ? "#10b981" : "#ef4444";
+                document.getElementById('coords').innerText = `${data.lat.toFixed(5)}, ${data.lng.toFixed(5)}`;
+
+                // Advanced Alert Logic
+                const alertBox = document.getElementById('geofenceAlert');
+                alertBox.innerText = data.geofence_status;
+                
+                if(data.geofence_status.includes("THEFT")) {
+                    alertBox.className = "alert-box danger";
+                    carMarker.bindPopup("<b>🚨 CRITICAL: THEFT IN PROGRESS!</b>").openPopup();
+                } else if(data.geofence_status.includes("Outside")) {
+                    alertBox.className = "alert-box";
+                    alertBox.style.display = "block";
+                    alertBox.style.background = "#f59e0b"; // Warning Orange
+                    carMarker.closePopup();
+                } else {
+                    alertBox.className = "alert-box";
+                    alertBox.style.display = "block";
+                    alertBox.style.background = "#10b981"; // Safe Green
+                    carMarker.closePopup();
+                }
+
+                // Smoothly pan camera
+                const newLatLng = new L.LatLng(data.lat, data.lng);
+                carMarker.setLatLng(newLatLng);
+                map.panTo(newLatLng, {animate: true, duration: 1.0});
+            } catch (error) {
+                console.error("Telemetry Error: ", error);
+            }
+        }, 1500);
+
+        async function sendCommand(action) {
+            try {
+                await fetch('/api/command', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: action }),
+                });
+                console.log("Command Dispatched: " + action);
+            } catch (error) {
+                alert("Failed to send command. Check server.");
+            }
+        }
+    </script>
+</body>
+</html>
